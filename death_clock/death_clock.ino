@@ -2,56 +2,64 @@
 #include <TimeLib.h>
 #include <EEPROM.h>
 #include <math.h>
+#include "RTClib.h"
 
-
-// THESE TWO CONSTANTS NEED TO BE SET
-#define CURRENT_EPOCH_TIME_SECONDS      1510359495    // IMPORTANT: update this number to the current epoch time, each time the board is restarted.
-#define FINAL_EPOCH_TIME_SECONDS        2895868800    // this is the expected epoch time of your life expectancy
-
-
-
-
+#define FINAL_EPOCH_TIME_SECONDS        3471314400    // this is the expected epoch time of your life expectancy
 
 // Hardware Consts
+RTC_PCF8523 rtc;
 #define eeprom_addr 0
 LiquidCrystal lcd(12, 11, 5, 4, 3, 2);
 
+// Globals
+long eepromValueCache = 0;    // EEPROM reads can be slow, so use a local memory cache.
 
-
-
-// Arduino Required Fns
-
+// Setup
 void setup() 
 {
+  Serial.begin(115200);
+  Serial.println("Hello World");
+
+  if (! rtc.begin()) {
+    Serial.println("Couldn't find RTC");
+    while (1);
+  }
+
+  if (! rtc.initialized()) {
+    Serial.println("RTC is NOT running!");
+  }
+
+  // following line sets the RTC to the date & time this sketch was compiled
+  rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
+  // This line sets the RTC with an explicit date & time, for example to set
+  // January 21, 2014 at 3am you would call:
+  // rtc.adjust(DateTime(2014, 1, 21, 3, 0, 0));
+
   lcd.begin(16, 2);
-  setTimeLibNow();
+
+  //pinMode(A3, OUTPUT);
+  //digitalWrite(A3, HIGH);
+  //pinMode(A2, OUTPUT);
+  //digitalWrite(A2, LOW);
 }
 
+// Main Function
 void loop()
 {
-  long current_epoch_time = now();
+  DateTime now = rtc.now();
+  Serial.println(now.unixtime());
+  long current_epoch_time = now.unixtime();
   long diff = FINAL_EPOCH_TIME_SECONDS - current_epoch_time;
+  Serial.println(diff);
 
   printToLcd(0, formatLong(years(diff), 5) + " years");
   printToLcd(1, printFormat(days(diff), hours(diff), minutes(diff), seconds(diff)));
-
-  // Twice a day, update EEPROM value & clear LCD
-  long timeSincelastPut = current_epoch_time - EepromGet();
-  long secondsInTwelveHours = 43200L;
-  if ( timeSincelastPut >= secondsInTwelveHours )
-  { // EEPROM has limited lifetime write/erase cycles. At rate of write/12hr, it should last ~137 years.
-    EepromPut( current_epoch_time );
-    clearLcd();
-  }
   
   delay(1000);
 }
 
 
-
-
 // LCD Helpers
-
 void printToLcd(int row, String s)
 {
   lcd.setCursor(0, row);
@@ -64,12 +72,7 @@ void clearLcd()
     lcd.display();
 }
 
-
-
 // EEPROM Helpers
-
-long eepromValueCache = 0;    // EEPROM reads can be slow, so use a local memory cache.
-
 long EepromGet()
 {
   if ( eepromValueCache > 0 )   { return eepromValueCache; }
@@ -86,40 +89,28 @@ void EepromPut(long t)
   eepromValueCache = t;
 }
 
-
-
-
 // Time Helpers
-
-void setTimeLibNow()
-{ // TimeLib.setTime(long) required by TimeLib.now()
-  long stored_epoch_time = EepromGet();
-  long t = CURRENT_EPOCH_TIME_SECONDS;
-  if ( stored_epoch_time > t )  { t = stored_epoch_time; }
-  setTime( t );
-}
-
-long seconds (long epoch_seconds)
+long seconds(long epoch_seconds)
 {
   return epoch_seconds % 60;
 }
 
-long minutes (long epoch_seconds)
+long minutes(long epoch_seconds)
 {
   return (epoch_seconds / 60) % 60;
 }
 
-long hours (long epoch_seconds)
+long hours(long epoch_seconds)
 {
   return (epoch_seconds / 60 / 60) % 24;
 }
 
-long days (long epoch_seconds)
+long days(long epoch_seconds)
 {
-  return (epoch_seconds / 60 / 60 / 24) % 365;
+  return(epoch_seconds / 60 / 60 / 24) % 365;
 }
 
-long years (long epoch_seconds)
+long years(long epoch_seconds)
 {
   return epoch_seconds / 60 / 60 / 24 / 365;
 }
